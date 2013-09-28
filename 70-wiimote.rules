@@ -1,0 +1,25 @@
+# udev rules for wiimotes tablets.
+# These rules were compiled for the Debian GNU/Linux distribution,
+# but others may, and indeed are encouraged to, use them also.
+
+ATTRS{name}=="Nintendo Wii*", ENV{WIIMOTE}="1"
+
+KERNEL!="event[0-9]*", GOTO="wiimote_end"
+ENV{WIIMOTE}!="1", GOTO="wiimote_end"
+
+ATTRS{name}=="Nintendo Wii Remote IR", ENV{WIIMOTE_TYPE}="ir"
+ATTRS{name}=="Nintendo Wii Remote Accelerometer", ENV{WIIMOTE_TYPE}="accel"
+ATTRS{name}=="Nintendo Wii Remote", ENV{WIIMOTE_TYPE}="controller"
+
+MODE="0660", GROUP="bluetooth"
+
+# Port specific link for users of multiple tablets of the same type.
+# The ID_PATH variable is set by the "path_id" script in an earlier rule file.
+ENV{ID_PATH}=="?*", SYMLINK+="input/by-path/$env{ID_PATH}-wiimote"
+
+# Convenience links for the common case of a single tablet.  We could do just this:
+ENV{WIIMOTE_TYPE}=="controller", SYMLINK+="input/wiimote"
+ENV{WIIMOTE_TYPE}!="controller", ENV{WIIMOTE_TYPE}!="", SYMLINK+="input/wiimote-$env{WIIMOTE_TYPE}"
+
+LABEL="wiimote_end"
+
