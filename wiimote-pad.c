@@ -201,7 +201,7 @@ static void wiimote_key(struct wiimote_dev *dev, struct xwii_event const *ev)
 static void wiimote_accel(struct wiimote_dev *dev, struct xwii_event const *ev)
 {
 	iev[11].value = -(ev->v.abs[0].y);
-	iev[12].value = ev->v.abs[0].x;
+	iev[12].value = -(ev->v.abs[0].x);
 
 	CLIP_AXIS(iev[11].value);
 	CLIP_AXIS(iev[12].value);
