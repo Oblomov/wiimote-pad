@@ -51,8 +51,8 @@ This repository also provides a set of `udev` rules to:
   Wiimotes.
 
 By default the group assigned to Wiimote devices is `bluetooth`, you
-might need to tune it for your system. The group and permission changed
-is needed sot that applications that use the event interface instead of
+might need to tune it for your system. The group and permission change
+is needed so that applications that use the event interface instead of
 the joystick interface can still access the Wiimote.
 
 ## Requirements
