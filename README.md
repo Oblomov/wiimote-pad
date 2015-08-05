@@ -26,7 +26,7 @@ The purpose of this tool is to allow any application to use a Wiimote
 ## Usage
 
 Associate your Wiimote with your computer (details on how to do this are
-not discussed here, but you may want to at [xwiimote][]'s page for
+not discussed here, but you may want to look at [xwiimote][]'s page for
 additional information), then start the program. As long as the program
 is running, a virtual controller (called “Nintendo Remote in gamepad
 mode”) will be available. Just press Ctrl+C to terminate the program and
