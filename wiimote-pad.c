@@ -31,6 +31,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -68,8 +69,8 @@ void err_check(int code, char const *str) {
 	_BUTTON(XWII_KEY_RIGHT, BTN_DPAD_RIGHT); \
 	_BUTTON(XWII_KEY_UP, BTN_DPAD_UP); \
 	_BUTTON(XWII_KEY_DOWN, BTN_DPAD_DOWN); \
-	_BUTTON(XWII_KEY_A, BTN_A); \
-	_BUTTON(XWII_KEY_B, BTN_B); \
+	_BUTTON(XWII_KEY_A, BTN_B); \
+	_BUTTON(XWII_KEY_B, BTN_A); \
 	_BUTTON(XWII_KEY_PLUS, BTN_TL); \
 	_BUTTON(XWII_KEY_MINUS, BTN_TR); \
 	_BUTTON(XWII_KEY_HOME, BTN_MODE); \
@@ -102,7 +103,7 @@ struct input_event iev[XWII_KEY_TWO+2+1+1];
 	padmode.absflat[key] = flat; \
 } while(0)
 
-#define AXIS_MAX 100
+#define AXIS_MAX 1000
 
 struct wiimote_dev {
 	const char *device;
@@ -123,6 +124,7 @@ struct wiimote_dev dev[MAX_WIIMOTES];
 void dev_init(struct wiimote_dev const *dev) {
 	int ret;
 	int fd = dev->uinput;
+        char devNumber = (dev->device)[13];
 
 #define _BUTTON(n, bt) do { \
 	set_key(bt); \
@@ -145,7 +147,10 @@ void dev_init(struct wiimote_dev const *dev) {
 	iev[13].type = EV_SYN;
 	iev[13].code = iev[13].value = 0;
 
-	snprintf(padmode.name, UINPUT_MAX_NAME_SIZE, XWII_NAME_CORE " in gamepad mode");
+	/*snprintf(padmode.name, UINPUT_MAX_NAME_SIZE, XWII_NAME_CORE " in lightgun mode");*/
+	/*snprintf(padmode.name, UINPUT_MAX_NAME_SIZE, "Lightgun");*/
+	snprintf(padmode.name, UINPUT_MAX_NAME_SIZE, "Lightgun %c", devNumber);
+	
 	padmode.id.bustype = BUS_VIRTUAL;
 	/*
 	padmode.id.vendor = 0;
@@ -186,7 +191,7 @@ static void wiimote_key(struct wiimote_dev *dev, struct xwii_event const *ev)
 		ret = write(dev->uinput, iev + 13, sizeof(*iev));
 		err_check(ret, "report btn SYN");
 	} else {
-		fputs("nowhere to report butto presses to\n", stderr);
+		fputs("nowhere to report button presses to\n", stderr);
 	}
 }
 
@@ -198,28 +203,37 @@ static void wiimote_key(struct wiimote_dev *dev, struct xwii_event const *ev)
 } while (0)
 
 
-static void wiimote_accel(struct wiimote_dev *dev, struct xwii_event const *ev)
+static void wiimote_ir(struct wiimote_dev *dev, struct xwii_event const *ev)
 {
-	iev[11].value = -(ev->v.abs[0].y);
-	iev[12].value = -(ev->v.abs[0].x);
+	double theta, x0, y0, dx, dy, cTheta, sTheta;
 
+	x0 = (ev->v.abs[1].x + ev->v.abs[0].x - 1023) / 2;
+	y0 = (ev->v.abs[1].y + ev->v.abs[0].y - 768) / 2;
+	dx = (ev->v.abs[1].x - ev->v.abs[0].x);
+	dy = (ev->v.abs[1].y - ev->v.abs[0].y);
+	theta = atan(dy / dx);
+	cTheta = cos(theta);
+	sTheta = sin(theta);
+	
+	iev[11].value = (- x0 * cTheta - y0 * sTheta) * AXIS_MAX / 1023 / 2;
+	iev[12].value = - (x0 * sTheta - y0 * cTheta) * AXIS_MAX / 768 / 2;
+	/*iev[12].value = (x0 * sTheta - y0 * cTheta) * 1023 / 768;*/
+
+/*
+        printf("%f %f %f %d %d \n", x0, y0, theta, iev[11].value, iev[12].value);
+*/
 	CLIP_AXIS(iev[11].value);
 	CLIP_AXIS(iev[12].value);
 
 	if (dev->uinput > 0) {
 		int ret = write(dev->uinput, iev + 11, sizeof(*iev));
-		err_check(ret, "report accel X");
+		err_check(ret, "report ir X");
 		ret = write(dev->uinput, iev + 12, sizeof(*iev));
-		err_check(ret, "report accel Y");
+		err_check(ret, "report ir Y");
 		ret = write(dev->uinput, iev + 13, sizeof(*iev));
-		err_check(ret, "report accel SYN");
-#if 0
-		printf("reported J (%d, %d) from ev (%d, %d)\n",
-			iev[11].value, iev[12].value,
-			-(ev->v.abs[0].y), ev->v.abs[0].x);
-#endif
+		err_check(ret, "report ir SYN");
 	} else {
-		fputs("nowhere to report accel to\n", stderr);
+		fputs("nowhere to report ir to\n", stderr);
 	}
 }
 
@@ -242,8 +256,8 @@ static int wiimote_poll(struct wiimote_dev *dev)
 		case XWII_EVENT_KEY:
 			wiimote_key(dev, &ev);
 			break;
-		case XWII_EVENT_ACCEL:
-			wiimote_accel(dev, &ev);
+		case XWII_EVENT_IR:
+			wiimote_ir(dev, &ev);
 			break;
 		default:
 			printf("Unhandled Wiimote event type %d\n", ev.type);
@@ -331,7 +345,7 @@ int dev_create(struct wiimote_dev *dev) {
 	printf("using device %d from root %s for %s\n",
 		dev->dev_id, dev->root, dev->device);
 
-	dev->ifs = XWII_IFACE_CORE | XWII_IFACE_ACCEL;
+	dev->ifs = XWII_IFACE_CORE | XWII_IFACE_IR;
 	ret = xwii_iface_new(&dev->iface, dev->root);
 	if (ret) {
 		fputs("Could not create xwiimote interface\n", stderr);
