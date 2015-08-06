@@ -41,6 +41,13 @@ Wiimote (e.g. `/dev/input/js0` or something like that). If no _device_
 is specified, the program will look for the first device that it can
 associate with and use that.
 
+### Note
+
+`wiimote-pad` is _specifically_ designed to expose the sideways Wiimote
+as a gamepad. All other Wiimote uses (especially the ones involving
+the infrared (IR) sensor) are outside of its scope. Please refer to the
+`xwiimote` and `xf86-input-wiimote` projects for those.
+
 ## `udev` rules
 
 This repository also provides a set of `udev` rules to:
