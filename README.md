@@ -4,7 +4,7 @@ This is a small tool to use a Wiimote as a gamepad.
 
 ## Introduction
 
-Linux has had built-insupport for the Wii Remote (Wiimote for short)
+Linux has had built-in support for the Wii Remote (Wiimote for short)
 since v3.1, support which was significantly cleaned up and improved
 since v3.11. However, the low-level kernel driver exposes each component
 of the Wiimote (accelerator, buttons, IR camera), as well as each
@@ -45,7 +45,7 @@ associate with and use that.
 
 This repository also provides a set of `udev` rules to:
 
-* change the group and the permissios of all Wiimote-related devices
+* change the group and the permissions of all Wiimote-related devices
   (both the kernel ones and the virtual one created by `wiimote-pad`);
 * create descriptive symlinks for the event devices associated with
   Wiimotes.
