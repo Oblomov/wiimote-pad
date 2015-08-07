@@ -1,7 +1,7 @@
-XWIIMOTE=../xwiimote/lib
+XWIIMOTE ?=../xwiimote
 
 wiimote-pad: wiimote-pad.c
-	$(CC) -Wall -o $@ $< -I$(XWIIMOTE) -ludev -lxwiimote
+	$(CC) -Wall -o $@ $< -I$(XWIIMOTE)/lib -L$(XWIIMOTE)/.libs -ludev -lxwiimote
 
 clean:
 	@rm -rf wiimote-pad

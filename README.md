@@ -77,8 +77,12 @@ should work.
 
 If you compiled and built `libxwiimote` yourself, you might
 need to fix the include path in the `Makefile` to point to the correct
-locations to look for the headers. By default, aside from standard
-locations, the `Makefile` will look for an `xwiimote` source directory
-in the parent of the `wiimote-pad` directory.
+locations to look for the headers, or run
+
+	make XWIIMOTE=/path/to/xwiimote/sources
+
+instead. By default, aside from standard locations, the `Makefile` will
+look for an `xwiimote` source directory in the parent of the
+`wiimote-pad` directory.
 
 [xwiimote]: http://dvdhrm.github.io/xwiimote
