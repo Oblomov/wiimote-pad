@@ -24,6 +24,7 @@
 #include <linux/uinput.h>
 
 #include <sys/select.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <glob.h>
 #include <errno.h>
