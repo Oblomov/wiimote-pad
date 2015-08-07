@@ -80,8 +80,6 @@ void err_check(int code, char const *str) {
 
 
 struct uinput_user_dev padmode;
-/* Room for controller keys and two axes, plus SYN */
-struct input_event iev[XWII_KEY_TWO+2+1+1];
 
 /* macros to set evbits and keybits */
 #define set_ev(key) do { \
@@ -114,14 +112,19 @@ struct wiimote_dev {
 	int uinput;
 
 	struct xwii_iface *iface;
+
+	/* Room for controller keys and two axes, plus SYN */
+	struct input_event iev[XWII_KEY_TWO+2+1+1];
+
 	unsigned int ifs;
 	int fd;
 };
 
-#define MAX_WIIMOTES 1
+#define MAX_WIIMOTES FD_SETSIZE
 struct wiimote_dev dev[MAX_WIIMOTES];
+int motes; /* Connected Wiimotes */
 
-void dev_init(struct wiimote_dev const *dev) {
+void dev_init(struct wiimote_dev const *dev, struct input_event *iev) {
 	int ret;
 	int fd = dev->uinput;
 
@@ -130,9 +133,11 @@ void dev_init(struct wiimote_dev const *dev) {
 	iev[n].type = EV_KEY; \
 	iev[n].code = bt; \
 } while (0)
+
 	set_ev(EV_KEY);
 	BUTTONS;
 	set_ev(EV_SYN);
+
 #undef _BUTTON
 
 	set_ev(EV_ABS);
@@ -169,11 +174,9 @@ static int wiimote_refresh(struct wiimote_dev *dev)
 
 static void wiimote_key(struct wiimote_dev *dev, struct xwii_event const *ev)
 {
-	unsigned int code;
-	unsigned int state;
-
-	code = ev->v.key.code;
-	state = ev->v.key.state;
+	unsigned int code = ev->v.key.code;
+	unsigned int state = ev->v.key.state;
+	struct input_event *iev = dev->iev;
 
 	if (code > XWII_KEY_TWO)
 		return;
@@ -201,6 +204,8 @@ static void wiimote_key(struct wiimote_dev *dev, struct xwii_event const *ev)
 
 static void wiimote_accel(struct wiimote_dev *dev, struct xwii_event const *ev)
 {
+	struct input_event *iev = dev->iev;
+
 	iev[11].value = -(ev->v.abs[0].y);
 	iev[12].value = -(ev->v.abs[0].x);
 
@@ -384,10 +389,8 @@ static void dev_destroy(struct wiimote_dev *dev) {
 glob_t js_devs;
 
 static void destroy_all_devs(void) {
-#if MAX_WIIMOTES > 1
-#error "destroy_all_devs only works for a single device"
-#endif
-	dev_destroy(dev);
+	while (motes-- > 0)
+		dev_destroy(dev + motes);
 	globfree(&js_devs);
 }
 
@@ -405,21 +408,24 @@ const char uinput_path[] = "/dev/uinput";
 const char js_glob[] = "/dev/input/js*";
 
 int main(int argc, char *argv[]) {
-	int ret;
-	size_t j;
-	fd_set fds[1];
+	int ret = 0;
+	fd_set input_fds, backup_fds;
+	int max_fd = -1;
 
 	atexit(destroy_all_devs);
 	signal(SIGINT, sig_exit);
 
 	if (argc > 1) {
-		dev->device = argv[1];
-		ret = dev_create(dev);
+		while (motes < argc) {
+			dev[motes].device = argv[motes+1];
+			ret = dev_create(dev + motes);
 
-		if (ret) {
-			fprintf(stderr, "could not %s (%d): %s\n",
-				"associate", ret, strerror(ret));
-			return ret;
+			if (ret) {
+				fprintf(stderr, "could not %s (%d): %s\n",
+					"associate", ret, strerror(ret));
+				return ret;
+			}
+			++motes;
 		}
 	} else {
 		/* No device specified. Since the Linux kernel exposes the
@@ -435,38 +441,53 @@ int main(int argc, char *argv[]) {
 			exit(ENODEV);
 		}
 
-		for (j = 0; j < js_devs.gl_pathc; ++j) {
-			dev->device = js_devs.gl_pathv[j];
-			ret = dev_create(dev);
-			if (!ret)
-				break; /* found */
-			printf("skipping %s (%d): %s\n",
-				dev->device, ret, strerror(ret));
-			dev->device = NULL;
-		}
-		if (!dev->device) {
-			fputs("no wiimote found\n", stderr);
-			exit(ENODEV);
+		for (size_t j = 0; j < js_devs.gl_pathc; ++j) {
+			dev[motes].device = js_devs.gl_pathv[j];
+			ret = dev_create(dev + motes);
+			if (!ret) {
+				++motes; /* found */
+			} else {
+				/* not found */
+				printf("skipping %s (%d): %s\n",
+					dev[motes].device, ret, strerror(ret));
+			}
 		}
 	}
 
-	dev->uinput = open(uinput_path, O_WRONLY | O_NONBLOCK);
-	err_check(dev->uinput, "open uinput");
+	if (motes == 0) {
+		fputs("no wiimote found\n", stderr);
+		exit(ENODEV);
+	}
 
-	dev_init(dev);
+	FD_ZERO(&backup_fds);
+
+	for (int j = 0; j < motes; ++j) {
+		dev[j].uinput = open(uinput_path, O_WRONLY | O_NONBLOCK);
+		err_check(dev[j].uinput, "open uinput");
+		dev_init(dev + j, dev[j].iev);
+
+		int fd = dev[j].fd;
+		FD_SET(fd, &backup_fds);
+		if (max_fd < fd)
+			max_fd = fd;
+	}
 
 	do {
 		memset(&no_wait, 0, sizeof(no_wait));
-		FD_ZERO(fds);
-		FD_SET(dev->fd, fds);
+		input_fds = backup_fds;
 
 		if (last_signal)
 			break;
-		ret = select(dev->fd + 1, fds, NULL, NULL, NULL);
+		ret = select(max_fd + 1, &input_fds, NULL, NULL, NULL);
 		err_check(ret, "poll wiimote fd");
 		if (ret > 0) {
-			ret = wiimote_poll(dev);
-			err_check(ret, "process wiimote data");
+			for (int j = 0; j < motes; ++j) {
+				struct wiimote_dev *cur = dev + j;
+				if (FD_ISSET(cur->fd, &input_fds)) {
+					ret = wiimote_poll(cur);
+					err_check(ret, "process wiimote data");
+				}
+			}
 		}
 	} while (1);
 
