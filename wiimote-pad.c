@@ -187,7 +187,7 @@ static void wiimote_key(struct wiimote_dev *dev, struct xwii_event const *ev)
 		ret = write(dev->uinput, iev + 13, sizeof(*iev));
 		err_check(ret, "report btn SYN");
 	} else {
-		fputs("nowhere to report butto presses to\n", stderr);
+		fputs("nowhere to report button presses to\n", stderr);
 	}
 }
 
