@@ -2,7 +2,7 @@ XWIIMOTE ?=../xwiimote
 
 CFLAGS ?=
 CFLAGS += -std=c99
-CFLAGS += -D_BSD_SOURCE
+CFLAGS += -D_BSD_SOURCE -D_DEFAULT_SOURCE
 CFLAGS += -Wall -Wextra
 
 CPPFLAGS ?=
