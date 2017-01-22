@@ -1,7 +1,7 @@
 /*
  * Wiimote-Pad
  *
- * Copyright (C) 2013 Giuseppe Bilotta
+ * Copyright (C) 2013-2017 Giuseppe Bilotta
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,17 +38,17 @@
 #include <xwiimote.h>
 
 /* These definitions might be missing from older linux/input.h headers */
-#ifndef BTN_DPAD_LEFT
-#define BTN_DPAD_LEFT 0x222
-#endif
-#ifndef BTN_DPAD_RIGHT
-#define BTN_DPAD_RIGHT 0x223
-#endif
 #ifndef BTN_DPAD_UP
 #define BTN_DPAD_UP 0x220
 #endif
 #ifndef BTN_DPAD_DOWN
 #define BTN_DPAD_DOWN 0x221
+#endif
+#ifndef BTN_DPAD_LEFT
+#define BTN_DPAD_LEFT 0x222
+#endif
+#ifndef BTN_DPAD_RIGHT
+#define BTN_DPAD_RIGHT 0x223
 #endif
 
 #define WIIMOTE_PADMODE_VENDOR_ID 0x6181 /* GIuseppe BIlotta */
@@ -64,11 +64,20 @@ void err_check(int code, char const *str) {
 	}
 }
 
-#define BUTTONS do { \
-	_BUTTON(XWII_KEY_LEFT, BTN_DPAD_LEFT); \
-	_BUTTON(XWII_KEY_RIGHT, BTN_DPAD_RIGHT); \
+#define DPAD_PORTRAIT \
 	_BUTTON(XWII_KEY_UP, BTN_DPAD_UP); \
 	_BUTTON(XWII_KEY_DOWN, BTN_DPAD_DOWN); \
+	_BUTTON(XWII_KEY_LEFT, BTN_DPAD_LEFT); \
+	_BUTTON(XWII_KEY_RIGHT, BTN_DPAD_RIGHT); \
+
+
+#define DPAD_LANDSCAPE \
+	_BUTTON(XWII_KEY_UP, BTN_DPAD_LEFT); \
+	_BUTTON(XWII_KEY_DOWN, BTN_DPAD_RIGHT); \
+	_BUTTON(XWII_KEY_LEFT, BTN_DPAD_DOWN); \
+	_BUTTON(XWII_KEY_RIGHT, BTN_DPAD_UP); \
+
+#define OTHER_BUTTONS \
 	_BUTTON(XWII_KEY_A, BTN_A); \
 	_BUTTON(XWII_KEY_B, BTN_B); \
 	_BUTTON(XWII_KEY_PLUS, BTN_TL); \
@@ -76,6 +85,15 @@ void err_check(int code, char const *str) {
 	_BUTTON(XWII_KEY_HOME, BTN_MODE); \
 	_BUTTON(XWII_KEY_ONE, BTN_1); \
 	_BUTTON(XWII_KEY_TWO, BTN_2); \
+
+#define BUTTONS_LANDSCAPE do { \
+	DPAD_LANDSCAPE \
+	OTHER_BUTTONS \
+} while (0)
+
+#define BUTTONS_PORTRAIT do { \
+	DPAD_PORTRAIT \
+	OTHER_BUTTONS \
 } while (0)
 
 
@@ -111,6 +129,8 @@ struct wiimote_dev {
 
 	int uinput;
 
+	int dpad_portrait;
+
 	struct xwii_iface *iface;
 
 	/* Room for controller keys and two axes, plus SYN */
@@ -124,6 +144,8 @@ struct wiimote_dev {
 struct wiimote_dev dev[MAX_WIIMOTES];
 int motes; /* Connected Wiimotes */
 
+int cli_dpad_portrait; /* D-pad in portrait mode selected on the command-line */
+
 void dev_init(struct wiimote_dev const *dev, struct input_event *iev) {
 	int ret;
 	int fd = dev->uinput;
@@ -135,7 +157,10 @@ void dev_init(struct wiimote_dev const *dev, struct input_event *iev) {
 } while (0)
 
 	set_ev(EV_KEY);
-	BUTTONS;
+	if (dev->dpad_portrait)
+		BUTTONS_PORTRAIT;
+	else
+		BUTTONS_LANDSCAPE;
 	set_ev(EV_SYN);
 
 #undef _BUTTON
@@ -271,6 +296,8 @@ int dev_create(struct wiimote_dev *dev) {
 	const char *root, *snum, *driver, *subs;
 	int num;
 
+	dev->dpad_portrait = cli_dpad_portrait;
+
 	if (!dev->device) {
 		ret = EINVAL;
 		goto exit;
@@ -370,6 +397,10 @@ exit_dev:
 exit_udev:
 	udev_unref(udev);
 exit:
+	if (!ret) {
+		printf("\twith D-pad in %s mode\n",
+			dev->dpad_portrait ? "portrait" : "landscape");
+	}
 	return ret;
 }
 
@@ -407,16 +438,53 @@ const char uinput_path[] = "/dev/uinput";
 
 const char js_glob[] = "/dev/input/js*";
 
+int check_dpad(int argc, char **argv[])
+{
+	printf("%d %p\n", argc, *argv);
+	if (argc > 1 && !strcmp((*argv)[1], "--dpad")) {
+		--argc; ++*argv;
+		if (argc <= 1) {
+			fputs("missing --dpad spec\n", stderr);
+			exit(1);
+		}
+		if (!strcmp((*argv)[1], "land") || !strcmp((*argv)[1], "landscape")) {
+			cli_dpad_portrait = 0;
+		} else if (!strcmp((*argv)[1], "port") || !strcmp((*argv)[1], "portrait")) {
+			cli_dpad_portrait = 1;
+		} else {
+			fprintf(stderr, "unknown --dpad spec %s\n", (*argv)[1]);
+			exit(1);
+		}
+		--argc; ++*argv;
+		printf("The next wiimote(s) will be configured with the D-pad in %s mode\n",
+			cli_dpad_portrait ? "portrait" : "landscape");
+	}
+	return argc;
+}
+
 int main(int argc, char *argv[]) {
 	int ret = 0;
 	fd_set input_fds, backup_fds;
 	int max_fd = -1;
 
+	cli_dpad_portrait = 0;
+
 	atexit(destroy_all_devs);
 	signal(SIGINT, sig_exit);
 
-	if (argc > 1) {
-		while (motes < argc) {
+	while (argc > 1) {
+		/* Check if there is a dpad specification */
+		ret = argc;
+		while (1) {
+			printf("%d %d\n", ret, argc);
+			ret = check_dpad(ret, &argv);
+			if (ret == argc)
+				break;
+			argc = ret;
+		}
+
+		/* If there are still arguments, assume it's a device specification */
+		if (argc > 1) {
 			dev[motes].device = argv[motes+1];
 			ret = dev_create(dev + motes);
 
@@ -427,7 +495,9 @@ int main(int argc, char *argv[]) {
 			}
 			++motes;
 		}
-	} else {
+	}
+
+	if (motes == 0) {
 		/* No device specified. Since the Linux kernel exposes the
 		 * controller also as a joystick (without axes), we peek at
 		 * all available joysticks looking for one which is a Wiimote

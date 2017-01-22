@@ -42,6 +42,24 @@ Wiimote (e.g. `/dev/input/js0` or something like that). If no _device_
 is specified, the program will look for the first device that it can
 associate with and use that.
 
+## D-pad orientation
+
+Since 2017, by default, the D-pad will be oriented in landscape mode (the
+arm closest to the A button will be mapped to _right_ rather than
+_down_), in accordance to the Wiimote orientation.
+
+This is a break from the previous behavior of the program. If you prefer
+the old behavior, you can pass the command-line option `--dpad
+portrait`, which will set the D-pad in portrait mode (arm closest to the
+A button will be mapped to _down_). You can enforce the new behavior
+with `--dpad landscape`, and even specify different D-pad settings for
+different Wiimotes, for example:
+
+	wiimote-pad --dpad portrait /dev/input/js0 --dpad landscape /dev/input/js1
+
+will set the `js0` Wiimote with the D-pad in portrait mode, and the
+`js1` one with the D-pad in landscape mode.
+
 ### Note
 
 `wiimote-pad` is _specifically_ designed to expose the sideways Wiimote
