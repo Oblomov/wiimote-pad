@@ -21,7 +21,8 @@ to make use of the library, this still doesn't allow an ‘out of the box’
 experience.
 
 The purpose of this tool is to allow any application to use a Wiimote
-—held sideways— as if it were a standard gamepad.
+—held sideways— as if it were a standard gamepad, with a 2-axes joystick
+(using the accelerometer), and a D-Pad.
 
 ## Usage
 
