@@ -117,8 +117,9 @@ struct wiimote_dev {
 	int fd;
 };
 
-#define MAX_WIIMOTES 1
+#define MAX_WIIMOTES 8
 struct wiimote_dev dev[MAX_WIIMOTES];
+size_t wiimote_count;
 
 void dev_init(struct wiimote_dev const *dev) {
 	int ret;
@@ -383,10 +384,10 @@ static void dev_destroy(struct wiimote_dev *dev) {
 glob_t js_devs;
 
 static void destroy_all_devs(void) {
-#if MAX_WIIMOTES > 1
-#error "destroy_all_devs only works for a single device"
-#endif
-	dev_destroy(dev);
+	int j;
+	for (j = 0; j < MAX_WIIMOTES; ++j) {
+		dev_destroy(dev);
+	}
 	globfree(&js_devs);
 }
 
@@ -406,7 +407,8 @@ const char js_glob[] = "/dev/input/js*";
 int main(int argc, char *argv[]) {
 	int ret;
 	size_t j;
-	fd_set fds[1];
+	fd_set fds[MAX_WIIMOTES];
+	int maxfd = -1;
 
 	atexit(destroy_all_devs);
 	signal(SIGINT, sig_exit);
@@ -435,37 +437,50 @@ int main(int argc, char *argv[]) {
 		}
 
 		for (j = 0; j < js_devs.gl_pathc; ++j) {
-			dev->device = js_devs.gl_pathv[j];
-			ret = dev_create(dev);
-			if (!ret)
-				break; /* found */
-			printf("skipping %s (%d): %s\n",
-				dev->device, ret, strerror(ret));
-			dev->device = NULL;
+			dev[wiimote_count].device = js_devs.gl_pathv[j];
+			ret = dev_create(&dev[wiimote_count]);
+			if (!ret) {
+				++wiimote_count;
+				if (wiimote_count == MAX_WIIMOTES)
+					break;
+			} else {
+				printf("skipping %s (%d): %s\n",
+						dev[wiimote_count].device, ret, strerror(ret));
+				dev[wiimote_count].device = NULL;
+			}
 		}
-		if (!dev->device) {
+		if (wiimote_count == 0) {
 			fputs("no wiimote found\n", stderr);
 			exit(ENODEV);
 		}
 	}
 
-	dev->uinput = open(uinput_path, O_WRONLY | O_NONBLOCK);
-	err_check(dev->uinput, "open uinput");
+	FD_ZERO(fds);
+	for(j = 0; j < wiimote_count; ++j) {
+		dev[j].uinput = open(uinput_path, O_WRONLY | O_NONBLOCK);
+		err_check(dev[j].uinput, "open uinput");
 
-	dev_init(dev);
+		dev_init(&dev[j]);
+		FD_SET(dev[j].fd, fds);
+
+		if (dev[j].fd > maxfd) {
+			maxfd = dev[j].fd;
+		}
+	}
+
 
 	do {
 		memset(&no_wait, 0, sizeof(no_wait));
-		FD_ZERO(fds);
-		FD_SET(dev->fd, fds);
 
 		if (last_signal)
 			break;
-		ret = select(dev->fd + 1, fds, NULL, NULL, NULL);
+		ret = select(maxfd + 1, fds, NULL, NULL, NULL);
 		err_check(ret, "poll wiimote fd");
 		if (ret > 0) {
-			ret = wiimote_poll(dev);
-			err_check(ret, "process wiimote data");
+			for (j = 0; j < wiimote_count; ++j) {
+				ret = wiimote_poll(&dev[j]);
+				err_check(ret, "process wiimote data");
+			}
 		}
 	} while (1);
 
