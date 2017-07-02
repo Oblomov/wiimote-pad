@@ -79,8 +79,8 @@ void err_check(int code, char const *str) {
 
 
 struct uinput_user_dev padmode;
-/* Room for controller keys and two axes, plus SYN */
-struct input_event iev[XWII_KEY_TWO+2+1+1];
+/* Room for controller keys and four axes, plus SYN */
+struct input_event iev[XWII_KEY_TWO+4+1+1];
 
 /* macros to set evbits and keybits */
 #define set_ev(key) do { \
@@ -142,8 +142,16 @@ void dev_init(struct wiimote_dev const *dev) {
 	iev[12].type = EV_ABS;
 	iev[12].code = ABS_Y;
 
-	iev[13].type = EV_SYN;
-	iev[13].code = iev[13].value = 0;
+	set_ev(EV_ABS);
+	set_abs(ABS_TILT_X, -AXIS_MAX, AXIS_MAX, 2, 4);
+	iev[13].type = EV_ABS;
+	iev[13].code = ABS_TILT_X;
+	set_abs(ABS_TILT_Y, -AXIS_MAX, AXIS_MAX, 2, 4);
+	iev[14].type = EV_ABS;
+	iev[14].code = ABS_TILT_Y;
+
+	iev[15].type = EV_SYN;
+	iev[15].code = iev[15].value = 0;
 
 	snprintf(padmode.name, UINPUT_MAX_NAME_SIZE, XWII_NAME_CORE " in gamepad mode");
 	padmode.id.bustype = BUS_VIRTUAL;
@@ -182,8 +190,21 @@ static void wiimote_key(struct wiimote_dev *dev, struct xwii_event const *ev)
 
 	if (dev->uinput > 0) {
 		int ret = write(dev->uinput, iev + code, sizeof(*iev));
+		if (code == XWII_KEY_LEFT) {
+			iev[12].value = AXIS_MAX * state;
+			write(dev->uinput, iev + 12, sizeof(*iev));
+		} else if (code == XWII_KEY_RIGHT) {
+			iev[12].value = -AXIS_MAX * state;
+			write(dev->uinput, iev + 12, sizeof(*iev));
+		} else if (code == XWII_KEY_UP) {
+			iev[11].value = -AXIS_MAX * state;
+			write(dev->uinput, iev + 11, sizeof(*iev));
+		} else if (code == XWII_KEY_DOWN) {
+			iev[11].value = AXIS_MAX * state;
+			write(dev->uinput, iev + 11, sizeof(*iev));
+		}
 		err_check(ret, "report button");
-		ret = write(dev->uinput, iev + 13, sizeof(*iev));
+		ret = write(dev->uinput, iev + 15, sizeof(*iev));
 		err_check(ret, "report btn SYN");
 	} else {
 		fputs("nowhere to report butto presses to\n", stderr);
@@ -200,18 +221,18 @@ static void wiimote_key(struct wiimote_dev *dev, struct xwii_event const *ev)
 
 static void wiimote_accel(struct wiimote_dev *dev, struct xwii_event const *ev)
 {
-	iev[11].value = -(ev->v.abs[0].y);
-	iev[12].value = -(ev->v.abs[0].x);
+	iev[13].value = -(ev->v.abs[0].y);
+	iev[14].value = -(ev->v.abs[0].x);
 
-	CLIP_AXIS(iev[11].value);
-	CLIP_AXIS(iev[12].value);
+	CLIP_AXIS(iev[13].value);
+	CLIP_AXIS(iev[14].value);
 
 	if (dev->uinput > 0) {
-		int ret = write(dev->uinput, iev + 11, sizeof(*iev));
+		int ret = write(dev->uinput, iev + 13, sizeof(*iev));
 		err_check(ret, "report accel X");
-		ret = write(dev->uinput, iev + 12, sizeof(*iev));
+		ret = write(dev->uinput, iev + 14, sizeof(*iev));
 		err_check(ret, "report accel Y");
-		ret = write(dev->uinput, iev + 13, sizeof(*iev));
+		ret = write(dev->uinput, iev + 15, sizeof(*iev));
 		err_check(ret, "report accel SYN");
 #if 0
 		printf("reported J (%d, %d) from ev (%d, %d)\n",
