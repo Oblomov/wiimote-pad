@@ -14,6 +14,7 @@ LDFLAGS += -ludev
 LDFLAGS += -lxwiimote
 
 wiimote-pad: wiimote-pad.c
+	$(CC) -o $@ $^ $(LDFLAGS) $(CFLAGS) $(CPPFLAGS)
 
 clean:
 	@rm -rf wiimote-pad
