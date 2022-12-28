@@ -10,8 +10,8 @@ CPPFLAGS += -I$(XWIIMOTE)/lib
 
 LDFLAGS ?=
 LDFLAGS += -L$(XWIIMOTE)/.libs
-LDFLAGS += -ludev
-LDFLAGS += -lxwiimote
+LDLIBS += -ludev
+LDLIBS += -lxwiimote
 
 wiimote-pad: wiimote-pad.c
 
